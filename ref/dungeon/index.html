@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<script type="text/javascript" src="dungeon.js"></script>
+	</head>
+	<body>
+		<script>
+			var render = (function() {
+				"use strict";
+
+				var POW = 6;
+
+				var dungeonObj = dungeonObj || {
+					canvas: undefined,
+					ctx: undefined,
+					map: [],
+					genAll: true,
+
+					init: function() {
+						dungeonObj.canvas = document.querySelector("#canvas");
+						dungeonObj.ctx = dungeonObj.canvas.getContext("2d");
+
+						dungeonObj.canvas.onclick = dungeonObj.onClick;
+						document.querySelector("#pow").onchange = dungeonObj.onChange;
+						document.querySelector("#step").onclick = dungeonObj.onStep;
+						document.querySelector("#all").onclick = dungeonObj.stepAll;
+						document.querySelector("#autogen").onchange = dungeonObj.toggleChange;
+						dungeonObj.onClick();
+					},
+
+					onClick: function() {
+						dungeonObj.map = dungeonGen.generate(POW);
+						if(dungeonObj.genAll) {
+							dungeonObj.stepAll();
+						} else {
+							dungeonObj.cls();
+							dungeonObj.draw();
+						}
+					},
+
+					onStep: function() {
+						dungeonGen.generateStep(dungeonObj.map);
+						dungeonObj.cls();
+						dungeonObj.draw();
+					},
+
+					stepAll: function() {
+						while(dungeonObj.map.step < dungeonObj.map.stepMax)
+							dungeonGen.generateStep(dungeonObj.map);
+						dungeonObj.cls();
+						dungeonObj.draw();
+					},
+
+					toggleChange: function(e) {
+						dungeonObj.genAll = e.target.checked;
+						if(dungeonObj.genAll)
+							dungeonObj.stepAll();
+					},
+
+					onChange: function(e) {
+						POW = e.target.value;
+						document.querySelector("#powVal").innerHTML = POW;
+						dungeonObj.canvas.width = Math.pow(2, POW) * 10;
+						dungeonObj.canvas.height = Math.pow(2, POW) * 10;
+						dungeonObj.onClick();
+					},
+
+					getColor: function(x, y) {
+						var v = dungeonObj.map.get(x,y);
+						if(v == dungeonGen.TYPES.dirt)
+							return "black";
+						if(v == dungeonGen.TYPES.air)
+							return dungeonGen.closeToSpawn(dungeonObj.map, x, y) ? "gray" : "white";
+						if(v == dungeonGen.TYPES.wall)
+							return "red";
+						if(v == dungeonGen.TYPES.stairs)
+							return "green";
+						return "blue";
+					},
+
+					cls: function() {
+						dungeonObj.ctx.save();
+						dungeonObj.ctx.fillStyle = "black";
+						dungeonObj.ctx.clearRect(0, 0, dungeonObj.canvas.width, dungeonObj.canvas.height);
+						dungeonObj.ctx.restore();
+					},
+					
+					drawRect: function(x, y) {
+						dungeonObj.ctx.save();
+						dungeonObj.ctx.fillStyle = dungeonObj.getColor(x, y);
+						dungeonObj.ctx.fillRect(x*10, y*10, 10, 10);
+						dungeonObj.ctx.restore();
+					},
+
+					draw: function() {
+						for(var x = 0; x < dungeonObj.map.N; x ++)
+							for(var y = 0; y < dungeonObj.map.N; y++)
+								dungeonObj.drawRect(x, y);
+					},
+				};
+
+				window.onload = dungeonObj.init;
+
+				return { dungeonObj: dungeonObj};
+			}());
+		</script>
+		<div width="800" height="800" style="overflow-x: auto; overflow-y: auto;">
+			<canvas id="canvas" width="640" height="640">
+				What the hell are you doing on that outdated browser?
+			</canvas>
+		</div>
+		<br />
+		<div id="stepSection">
+			<button id="step">Step</button>
+			<button id="all">Gen All</button>
+			<label for="autogen">Auto Generate</label>
+			<input id="autogen" type="checkbox" checked="true"/>
+		</div>
+		<div id="powSection">
+			<input id="pow" type ="range" min ="4" max="10" step ="1" value ="6"/>
+			<span id="powVal">6</span>
+		</div>
+	</body>
+</html>

@@ -1,0 +1,14 @@
+*) Initialize list of dungeons (Rooms)
+*) Generate initial dungeon
+*) Tick
+	1. Any entities in unloaded dungeon?
+		-> Generate dungeon
+	2. Loop on dungeon list
+		1) Spawner check
+			-> If can spawn, spawn enemies
+		2) Loop on entity list
+			-> Process movement
+			-> If entity attacking, deal damage
+		3) Loop on entity list
+			-> If entity dead, remove
+		4) Send updates

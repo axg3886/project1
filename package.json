@@ -1,0 +1,27 @@
+{
+  "name": "catalyst-lite",
+  "version": "1.0.0",
+  "description": "Dungeon Delver for IGME-590",
+  "main": "src/server.js",
+  "scripts": {
+    "build": "babel ./src/client --out-file ./build/bundle.js",
+    "watch": "babel --watch ./src/client --out-file ./build/bundle.js",
+    "nodemon": "nodemon --watch ./src ./src/server/main.js",
+    "start": "node ./src/server/main.js",
+    "pretest": "eslint ./src --fix",
+    "test": "echo \"tests complete!\""
+  },
+  "author": "Ashwin Ganapathiraju",
+  "license": "ISC",
+  "dependencies": {
+    "socket.io": "^1.4.8"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-env": "^1.6.0",
+    "eslint": "^3.0.0",
+    "eslint-config-airbnb": "^9.0.1",
+    "eslint-plugin-import": "^1.10.1",
+    "nodemon": "^1.12.1"
+  }
+}
