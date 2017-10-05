@@ -61,7 +61,7 @@ const onJoined = (socket) => socket.on('join', (data) => {
     socket.join("base");
     dungeonLookup["base"].entities[player.id] = player;
     // THIS YOU
-    socket.emit("update", getEntities("base"));
+    socket.emit("update", {entities: getEntities("base"), id: player.id});
 });
 
 io.sockets.on('connection', (socket) => {
