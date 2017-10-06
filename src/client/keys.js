@@ -1,14 +1,12 @@
-"use strict";
-
 var myKeys = {};
 
 myKeys.KEYBOARD = Object.freeze({
-	"KEY_LEFT": 37, 
-	"KEY_UP": 38, 
-	"KEY_RIGHT": 39, 
-	"KEY_DOWN": 40,
-	"KEY_SPACE": 32,
-	"KEY_SHIFT": 16
+	KEY_LEFT: 37, 
+	KEY_UP: 38, 
+	KEY_RIGHT: 39, 
+	KEY_DOWN: 40,
+	KEY_SPACE: 32,
+	KEY_SHIFT: 16
 });
 myKeys.keydown = [];
 

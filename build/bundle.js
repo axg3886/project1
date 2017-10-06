@@ -1,13 +1,123 @@
 "use strict";
 
+var myKeys = {};
+
+myKeys.KEYBOARD = Object.freeze({
+	KEY_LEFT: 37,
+	KEY_UP: 38,
+	KEY_RIGHT: 39,
+	KEY_DOWN: 40,
+	KEY_SPACE: 32,
+	KEY_SHIFT: 16
+});
+myKeys.keydown = [];
+
+// event listeners
+window.addEventListener("keydown", function (e) {
+	return myKeys.keydown[e.keyCode] = true;
+});
+window.addEventListener("keyup", function (e) {
+	return myKeys.keydown[e.keyCode] = false;
+});
+"use strict";
+
 var socket = void 0;
 
 var canvas = void 0;
 var ctx = void 0;
 
-// Utilities
-var randLoc = function randLoc() {
-  return Math.floor(Math.random() * 290 + 10);
+var map = [];
+var mapSize = 32;
+
+var entityList = {};
+var user = void 0;
+
+// Thanks Cody-sempai!
+var lerp = function lerp(v0, v1, alpha) {
+  return (1 - alpha) * v0 + alpha * v1;
+};
+
+var onUpdate = function onUpdate(data) {
+  if (data.entities) {
+    // Initial update only
+    // Set entity data
+    entityList = data.entities;
+    user = entityList[data.id];
+
+    // Set map data
+    map = data.map;
+    mapSize = data.bounds;
+    canvas.width = mapSize * 10;
+    canvas.height = mapSize * 10;
+
+    // Start updates
+    requestAnimationFrame(tick);
+    return;
+  }
+
+  var entity = entityList[data.id];
+  if (!entity) {
+    entityList[data.id] = data;
+    requestAnimationFrame(tick);
+    return;
+  }
+  if (entity.lastUpdate >= data.lastUpdate) return;
+  entity.lastUpdate = data.lastUpdate;
+  entity.x = data.x;
+  entity.y = data.y;
+  entity.prevX = data.destX;
+  entity.prevY = data.destY;
+  entity.destX = data.destX;
+  entity.destY = data.destY;
+  entity.hp = data.hp;
+  entity.alpha = 0;
+};
+
+var redraw = function redraw() {
+  ctx.clearRect(0, 0, mapSize * 10, mapSize * 10);
+
+  var keys = Object.keys(entityList);
+  for (var i = 0; i < keys.length; i++) {
+    var entity = entityList[keys[i]];
+
+    // Update alpha
+    if (entity.alpha < 1) entity.alpha += 0.05;
+
+    // Lerp position
+    entity.x = lerp(entity.prevX, entity.destX, entity.alpha);
+    entity.y = lerp(entity.prevY, entity.destY, entity.alpha);
+    // If self, red, otherwise black
+    ctx.fillStyle = entity.id == user.id ? "red" : "#aaa";
+    // Draw box
+    ctx.fillRect(entity.x, entity.y, 30, 30);
+    ctx.fillStyle = "black";
+    ctx.fillText(entity.name, entity.x, entity.y - 10);
+    ctx.fillStyle = "green";
+    ctx.fillRect(entity.x, entity.y - 7, entity.hp * 3, 5);
+  }
+};
+
+var tick = function tick(time) {
+  user.prevX = user.x;
+  user.prevY = user.y;
+
+  // Key input
+  if (myKeys.keydown[myKeys.KEYBOARD.KEY_LEFT]) user.destX = Math.max(0, user.destX - 2);
+  if (myKeys.keydown[myKeys.KEYBOARD.KEY_UP]) user.destY = Math.max(0, user.destY - 2);
+  if (myKeys.keydown[myKeys.KEYBOARD.KEY_RIGHT]) user.destX = Math.min(mapSize * 9, user.destX + 2);
+  if (myKeys.keydown[myKeys.KEYBOARD.KEY_DOWN]) user.destY = Math.min(mapSize * 9, user.destY + 2);
+
+  // Reset alpha
+  user.alpha = 0;
+
+  // Emit update
+  socket.emit('movement', user);
+
+  // Redraw
+  redraw();
+
+  // Tick at 60 fps
+  requestAnimationFrame(tick);
 };
 
 var init = function init() {
@@ -17,33 +127,13 @@ var init = function init() {
   socket = io.connect();
 
   socket.on('connect', function () {
-    console.log("Connected.");
-
-    var tempCanvas = document.createElement("canvas");
-    tempCanvas.height = 500;
-    tempCanvas.width = 500;
-    var tempCtx = tempCanvas.getContext("2d");
-    var x = randLoc(),
-        y = randLoc();
-    tempCtx.fillStyle = "black";
-    tempCtx.fillRect(x, y, 100, 100);
-    socket.emit("draw", {
-      x: x, y: y, width: 100, height: 100,
-      imgData: tempCanvas.toDataURL()
-    });
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    socket.emit("join", { name: "Player" + Math.floor(Math.random() * 100) });
   });
-  // Catch updates and draw
-  socket.on('update', function (data) {
-    var image = new Image();
-    image.onload = function () {
-      ctx.save();
-      ctx.globalCompositeOperation = "source-over";
-      ctx.drawImage(image, data.x, data.y, data.width, data.height);
-      ctx.restore();
-    };
-    image.src = data.imgData;
+
+  socket.on('update', onUpdate);
+
+  socket.on('kill', function (data) {
+    if (entityList[data.id]) delete entityList[data.id];
   });
 };
 
