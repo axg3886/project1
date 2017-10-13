@@ -3,16 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      canvas {
-        border:1px solid gray;
+      #background {
+        background: #ffffff;
+        position:absolute;
         z-index: 0;
+        left: 10px;
+        top: 10px;
+        box-shadow: 4px 4px 8px rgba(0,0,0,0.5);
+      }
+
+      #entity {
+        background: rgba(0, 0, 0, 0);
+        position:absolute;
+        z-index: 1;
+        left: 10px;
+        top: 10px;
       }
     </style>
     <script src="/socket.io/socket.io.js"></script>
     <script src="bundle.js"></script>
   </head>
   <body>
-    <canvas width="500" height="500">
+    <canvas width="500" height="500" id="entity">
+      Get a real browser!
+    </canvas>
+    <canvas width="500" height="500" id="background">
       Get a real browser!
     </canvas>
   </body>

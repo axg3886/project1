@@ -1,7 +1,8 @@
 const http = require('http');
 const fs = require('fs');
 const socketio = require('socket.io');
-const xxh = require('xxhashjs');
+const dungeonManager = require('./dungeonManager.js');
+const Constants = require('../shared/constants.js').Constants;
 
 const port = process.env.PORT || process.env.NODE_PORT || 3000;
 
@@ -22,72 +23,13 @@ const onRequest = (req, res) => {
 const app = http.createServer(onRequest).listen(port);
 const io = socketio(app);
 
-console.log(`Listening on 127.0.0.1: ${port}`);
-
-// TODO: Move to seperate files
-
-// Global entity id counter
-let entityId = 1;
-
-// Initialize list of dungeons (rooms)
-const dungeonList = []; // List of floor names, in order
-const dungeonLookup = {}; // Collection of name->dungeon lookups
-
-const entityList = {}; // List of entities (id->entity, includes players)
+ /* eslint-disable no-console */
+ // Done to prevent warning for this one line
+console.log(`Listening on 127.0.0.1:${port}`);
+ /* eslint-enable no-console */
 
 // Generate initial dungeon
-const initialD = 'base'; // YEAHHH!!!
-dungeonList.push(initialD);
-const base = dungeonLookup[initialD] = {
-  map: [], // Terrain map (temporary)
-  bounds: 32, // Size of side (temporary)
-  entities: [], // Entity list (ids)
-};
-for (let i = 0; i < base.bounds; i++) {
-  for (let j = 0; j < base.bounds; j++) { base.map[i * base.bounds + j] = 0; }
-}
-
-const makeEntity = (name) => ({
-  name,
-  hp: 10,
-  atk: 1,
-  def: 1,
-  x: 160,
-  y: 160,
-  prevX: 160,
-  prevY: 160,
-  destX: 160,
-  destY: 160,
-  id: xxh.h32(`${entityId++}${Date.now()}`, 0xCAFEBABE).toString(16),
-  lastUpdate: new Date().getTime(),
-});
-
-const getUpdateEntity = (entity) => ({
-  id: entity.id,
-  x: entity.x,
-  y: entity.y,
-  prevX: entity.destX,
-  prevY: entity.destY,
-  destX: entity.destX,
-  destY: entity.destY,
-  name: entity.name,
-  hp: entity.hp,
-  lastUpdate: entity.lastUpdate,
-});
-
-const removeEntity = (dungeon, i) => {
-  const d = dungeonLookup[dungeon];
-  d.entities = d.entities.filter((e) => e !== i);
-};
-
-const getEntities = (dungeon) => {
-  const collect = {};
-  const eList = dungeonLookup[dungeon].entities;
-  for (let i = 0; i < eList.length; i++) {
-    collect[eList[i]] = getUpdateEntity(entityList[eList[i]]);
-  }
-  return collect;
-};
+dungeonManager.getDungeon('dungeon0');
 
 // Called once, when the player joins.
 const onJoined = (sock) => {
@@ -97,54 +39,68 @@ const onJoined = (sock) => {
       // Client: HI THERE
 
       // Create player
-    const player = makeEntity(data.name);
-    player.dungeon = initialD;
-
-      // Give some random jitter
-    player.x += Math.random() * 20 - 10;
-    player.y += Math.random() * 20 - 10;
-    player.destX = player.x;
-    player.destY = player.y;
-
-    const dungeon = dungeonLookup[player.dungeon];
-
+    const player = dungeonManager.makeEntity(data.name);
+    player.dungeon = 'dungeon0';
     socket.join(player.dungeon);
     socket.playerId = player.id;
 
-    dungeon.entities.push(player.id);
-    entityList[player.id] = player;
+    dungeonManager.addEntity(player.dungeon, player);
+
+    const map = dungeonManager.getDungeon(player.dungeon);
 
       // THIS YOU
     socket.emit('update', {
-      entities: getEntities(player.dungeon),
+      entities: dungeonManager.getEntities(map),
       id: player.id,
-      map: dungeon.map,
-      bounds: dungeon.bounds,
+      map,
     });
-    socket.broadcast.to(player.dungeon).emit('update', getUpdateEntity(player));
+    socket.broadcast.to(player.dungeon).emit('update', dungeonManager.getUpdateEntity(player));
   });
 };
 // Disconnection should delete the user
 const onDisconnect = (socket) => socket.on('disconnect', () => {
-  const player = entityList[socket.playerId];
-  delete entityList[socket.playerId];
-  removeEntity(player.dungeon, player.id);
+  const player = dungeonManager.getEntity(socket.playerId);
   socket.leave(player.dungeon);
   socket.broadcast.to(player.dungeon).emit('kill', { id: player.id });
+  dungeonManager.removeEntity(player.dungeon, player.id);
+  dungeonManager.deleteEntity(player.id);
 });
 // TODO: Client verification and limiting is important.
 // Blindly trusting leads to wallhacks and pain.
 const onMovement = (socket) => socket.on('movement', (data) => {
-  const player = entityList[socket.playerId];
-  if (!player) { return; }
-  player.x = data.x;
-  player.y = data.y;
-  player.prevX = data.destX;
-  player.prevY = data.destY;
+  const player = dungeonManager.getEntity(socket.playerId);
+  if (!player) {
+    return;
+  }
+  const dungeon = dungeonManager.getDungeon(player.dungeon);
+
+  // When moving entities, watch out for sharp edges!
+  if (Constants.getTile(dungeon, data.x, data.y) === Constants.TYPES.stairs) {
+    io.to(player.dungeon).emit('kill', { id: player.id });
+    socket.leave(player.dungeon);
+    dungeonManager.moveEntity(player.dungeon, player.id);
+    const dungeonNew = dungeonManager.getDungeon(player.dungeon);
+
+    socket.join(player.dungeon);
+    socket.emit('update', {
+      entities: dungeonManager.getEntities(dungeonNew),
+      id: player.id,
+      map: dungeonNew,
+    });
+    socket.broadcast.to(player.dungeon).emit('update', dungeonManager.getUpdateEntity(player));
+    return;
+  }
+
+  const walkable = Constants.canWalk(dungeon, data.x, data.y);
+
+  player.x = walkable ? data.x : data.prevX;
+  player.y = walkable ? data.y : data.prevY;
+  player.prevX = data.prevX;
+  player.prevY = data.prevY;
   player.destX = data.destX;
   player.destY = data.destY;
   player.lastUpdate = new Date().getTime();
-  socket.broadcast.to(player.dungeon).emit('update', getUpdateEntity(player));
+  socket.broadcast.to(player.dungeon).emit('update', dungeonManager.getUpdateEntity(player));
 });
 
 io.sockets.on('connection', (socket) => {
