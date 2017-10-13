@@ -19,7 +19,7 @@
   },
   "engines": {
     "node": "8.4.0",
-    "npm": "5.3.0",
+    "npm": "5.3.0"
   },
   "devDependencies": {
     "babel-cli": "^6.26.0",
