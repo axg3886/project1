@@ -29,7 +29,9 @@ if (typeof(module) !== 'undefined' && module.exports) {
 
     const nextInt = (i) => Math.floor(Math.random() * i);
 
-    const getTile = (map, x, y) => map.get(Math.floor(x + 0.5), Math.floor(y + 0.5));
+    const floorLoc = (i) => Math.floor(i + 0.5);
+
+    const getTile = (map, x, y) => map.get(floorLoc(x), floorLoc(y));
 
     const canWalk = (map, x, y) => {
       const v = getTile(map, x, y);
@@ -47,6 +49,7 @@ if (typeof(module) !== 'undefined' && module.exports) {
       closeToSpawn,
       nextInt,
       canWalk,
+      floorLoc,
       getTile,
       distSqrd,
       distForm,

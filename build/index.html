@@ -19,6 +19,14 @@
         left: 10px;
         top: 10px;
       }
+
+      #msgBox {
+        position:absolute;
+        z-index: 2;
+        left: 600px;
+        top: 10px;
+        box-shadow: 4px 4px 8px rgba(0,0,0,0.5);
+      }
     </style>
     <script src="/socket.io/socket.io.js"></script>
     <script src="bundle.js"></script>
@@ -30,5 +38,6 @@
     <canvas width="500" height="500" id="background">
       Get a real browser!
     </canvas>
+    <input type="text" placeholder="/ to chat..." id="msgBox" />
   </body>
 </html>

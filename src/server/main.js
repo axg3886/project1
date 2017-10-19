@@ -60,10 +60,14 @@ const onJoined = (sock) => {
 // Disconnection should delete the user
 const onDisconnect = (socket) => socket.on('disconnect', () => {
   const player = dungeonManager.getEntity(socket.playerId);
-  socket.leave(player.dungeon);
-  socket.broadcast.to(player.dungeon).emit('kill', { id: player.id });
-  dungeonManager.removeEntity(player.dungeon, player.id);
-  dungeonManager.deleteEntity(player.id);
+  if (player) {
+    if (player.dungeon) {
+      socket.leave(player.dungeon);
+      socket.broadcast.to(player.dungeon).emit('kill', { id: player.id });
+      dungeonManager.removeEntity(player.dungeon, player.id);
+    }
+    dungeonManager.deleteEntity(player.id);
+  }
 });
 // TODO: Client verification and limiting is important.
 // Blindly trusting leads to wallhacks and pain.
@@ -103,8 +107,21 @@ const onMovement = (socket) => socket.on('movement', (data) => {
   socket.broadcast.to(player.dungeon).emit('update', dungeonManager.getUpdateEntity(player));
 });
 
+const onMessage = (socket) => socket.on('playerMsg', (data) => {
+  const player = dungeonManager.getEntity(socket.playerId);
+  if (!player) {
+    return;
+  }
+  const obj = {
+    msg: `[${player.name}] ${data.msg}`,
+    time: (new Date().getTime()),
+  };
+  io.to(player.dungeon).emit('playerMsg', obj);
+});
+
 io.sockets.on('connection', (socket) => {
   onJoined(socket);
   onDisconnect(socket);
   onMovement(socket);
+  onMessage(socket);
 });

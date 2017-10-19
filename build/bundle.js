@@ -1,24 +1,59 @@
 'use strict';
 
+/* global Constants, map, user, messageBox */
+
 var myKeys = {};
 
-myKeys.KEYBOARD = Object.freeze({
-  KEY_LEFT: 37,
-  KEY_UP: 38,
-  KEY_RIGHT: 39,
-  KEY_DOWN: 40,
-  KEY_SPACE: 32,
-  KEY_SHIFT: 16
-});
-myKeys.keydown = [];
+myKeys.keydown = {};
 
 // event listeners
 window.addEventListener('keydown', function (e) {
-  myKeys.keydown[e.keyCode] = true;
+  myKeys.keydown[e.key] = true;
 });
 window.addEventListener('keyup', function (e) {
-  myKeys.keydown[e.keyCode] = false;
+  myKeys.keydown[e.key] = false;
 });
+
+myKeys.handleKeys = function () {
+  var prevDestX = user.destX;
+  var prevDestY = user.destY;
+
+  if (document.activeElement !== messageBox) {
+    // Key input
+    if (myKeys.keydown.ArrowLeft || myKeys.keydown.a) {
+      user.destX = Math.max(0, user.destX - 0.1);
+    }
+    if (myKeys.keydown.ArrowUp || myKeys.keydown.w) {
+      user.destY = Math.max(0, user.destY - 0.1);
+    }
+    if (myKeys.keydown.ArrowRight || myKeys.keydown.d) {
+      user.destX = Math.min(map.bounds, user.destX + 0.1);
+    }
+    if (myKeys.keydown.ArrowDown || myKeys.keydown.s) {
+      user.destY = Math.min(map.bounds, user.destY + 0.1);
+    }
+
+    if (!Constants.canWalk(map, user.destX, user.destY)) {
+      user.destX = prevDestX;
+      user.destY = prevDestY;
+    }
+
+    if (map.getLit(Constants.floorLoc(user.destX), Constants.floorLoc(user.destY)) === undefined) {
+      user.destX = prevDestX;
+      user.destY = prevDestY;
+    }
+
+    // Reset alpha
+    user.alpha = 0;
+  }
+
+  if (myKeys.keydown['/']) {
+    if (messageBox.value.startsWith('/')) {
+      messageBox.value = messageBox.value.substring(1);
+    }
+    messageBox.focus();
+  }
+};
 'use strict';
 
 /* global myKeys, io, Constants */
@@ -32,14 +67,17 @@ var canvas2 = void 0;
 var background = void 0;
 var redrawBackground = void 0;
 
-var scale = 10;
-var fov = 100;
+var messageBox = void 0;
+
+var scale = 12;
+var radius = 10;
 
 var map = {};
-var mapSize = 32;
 
 var entityList = {};
 var user = void 0;
+
+var messageList = [];
 
 // Thanks Cody-sempai!
 var lerp = function lerp(v0, v1, alpha) {
@@ -57,6 +95,78 @@ var readMap = function readMap(data) {
   map.set = function (x, y, v) {
     map.arr[x * map.bounds + y] = v;
   };
+
+  map.lit = [];
+  map.getLit = function (x, y) {
+    return map.lit[x * map.bounds + y];
+  };
+  map.setLit = function (x, y, v) {
+    map.lit[x * map.bounds + y] = v;
+  };
+
+  map.resetLit = function () {
+    for (var x = 0; x < map.bounds; x++) {
+      for (var y = 0; y < map.bounds; y++) {
+        if (map.getLit(x, y) >= 0) {
+          map.setLit(x, y, radius - 1);
+        }
+      }
+    }
+  };
+  for (var x = 0; x < map.bounds; x++) {
+    for (var y = 0; y < map.bounds; y++) {
+      map.setLit(x, y, -1);
+    }
+  }
+};
+
+/* Obtained from: http://www.roguebasin.com/index.php?title=LOS_using_strict_definition */
+var los = function los(x0, y0, x1, y1) {
+  var dx = x1 - x0;
+  var dy = y1 - y0;
+
+  // determine which quadrant to we're calculating: we climb in these two directions
+  var sx = x0 < x1 ? 1 : -1;
+  var sy = y0 < y1 ? 1 : -1;
+
+  var xnext = x0;
+  var ynext = y0;
+
+  // calculate length of line to cast (distance from start to final tile)
+  var dist = Math.sqrt(dx * dx + dy * dy);
+
+  // essentially casting a ray of length radius: (radius^3)
+  while (xnext !== x1 || ynext !== y1) {
+    if (map.get(xnext, ynext) !== Constants.TYPES.air) {
+      return;
+    }
+    // Line-to-point distance formula < 0.5
+    if (Math.abs(dy * (xnext - x0 + sx) - dx * (ynext - y0)) / dist < 0.5) {
+      xnext += sx;
+    } else if (Math.abs(dy * (xnext - x0) - dx * (ynext - y0 + sy)) / dist < 0.5) {
+      ynext += sy;
+    } else {
+      xnext += sx;
+      ynext += sy;
+    }
+  }
+  map.setLit(x1, y1, Math.floor(dist));
+};
+
+/* Obtained from: http://www.roguebasin.com/index.php?title=LOS_using_strict_definition */
+var fov = function fov() {
+  map.resetLit();
+
+  var x = Constants.floorLoc(user.x);
+  var y = Constants.floorLoc(user.y);
+
+  for (var i = -radius; i <= radius; i++) {
+    for (var j = -radius; j <= radius; j++) {
+      if (i * i + j * j < radius * radius) {
+        los(x, y, x + i, y + j);
+      }
+    }
+  }
 };
 
 var getColor = function getColor(x, y) {
@@ -83,8 +193,8 @@ var redraw = function redraw() {
     background.fillStyle = 'black';
     background.clearRect(0, 0, canvas2.width, canvas2.height);
 
-    for (var i = 0; i < mapSize; i++) {
-      for (var j = 0; j < mapSize; j++) {
+    for (var i = 0; i < map.bounds; i++) {
+      for (var j = 0; j < map.bounds; j++) {
         background.fillStyle = getColor(i, j);
         background.fillRect(i * scale, j * scale, scale, scale);
       }
@@ -96,20 +206,66 @@ var redraw = function redraw() {
   ctx.fillStyle = 'black';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Clear up FOV
-  ctx.clearRect(user.x * scale - fov, user.y * scale - fov, fov * 2, fov * 2);
+  // LoS Drawing
+  var val = 0;
+  for (var _i = 0; _i < map.bounds; _i++) {
+    for (var _j = 0; _j < map.bounds; _j++) {
+      val = map.getLit(_i, _j);
+      if (val < 0) {
+        continue;
+      }
+      ctx.globalAlpha = val / radius;
+      ctx.clearRect(_i * scale, _j * scale, scale, scale);
+      ctx.fillRect(_i * scale, _j * scale, scale, scale);
+    }
+  }
+  ctx.globalAlpha = 1.0;
 
   // Draw world name
   ctx.fillStyle = 'white';
-  ctx.fillText(map.name, (mapSize - 7) * scale, (mapSize - 1) * scale);
+  ctx.fillText(map.name, (map.bounds - 7) * scale, (map.bounds - 1) * scale);
 
-  // Quasi-debug "destination" square
-  ctx.fillStyle = 'yellow';
-  ctx.fillRect(user.destX * scale, user.destY * scale, scale, scale);
+  // Draw messages
+  var msgNum = Math.min(15, messageList.length);
+  for (var _i2 = 0; _i2 < msgNum; _i2++) {
+    ctx.fillText(messageList[_i2].msg, 10, (_i2 + 2) * scale);
+  }
 
   var keys = Object.keys(entityList);
-  for (var _i = 0; _i < keys.length; _i++) {
-    var entity = entityList[keys[_i]];
+  for (var _i3 = 0; _i3 < keys.length; _i3++) {
+    var entity = entityList[keys[_i3]];
+    var eX = Constants.floorLoc(entity.x);
+    var eY = Constants.floorLoc(entity.y);
+
+    if (map.getLit(eX, eY) < 0) {
+      continue;
+    }
+    // If self, blue, otherwise gray
+    ctx.fillStyle = entity.id === user.id ? 'blue' : 'yellow';
+    // Draw box
+    ctx.fillRect(entity.x * scale, entity.y * scale, 8, 8);
+    ctx.fillStyle = 'gray';
+    ctx.fillText(entity.name, entity.x * scale, entity.y * scale - 10);
+    ctx.fillStyle = 'green';
+    ctx.fillRect(entity.x * scale, entity.y * scale - 7, entity.hp * 3, 5);
+  }
+};
+
+var tick = function tick() {
+  user.prevX = user.x;
+  user.prevY = user.y;
+
+  myKeys.handleKeys(user);
+
+  if (user.x !== user.prevX || user.y !== user.prev) {
+    // Emit update
+    socket.emit('movement', user);
+  }
+
+  // Entity update
+  var keys = Object.keys(entityList);
+  for (var i = 0; i < keys.length; i++) {
+    var entity = entityList[keys[i]];
 
     // Update alpha
     if (entity.alpha < 1) {
@@ -124,49 +280,20 @@ var redraw = function redraw() {
       entity.x = entity.prevX;
       entity.y = entity.prevY;
     }
-
-    // If self, blue, otherwise gray
-    ctx.fillStyle = entity.id === user.id ? 'blue' : '#aaa';
-    // Draw box
-    ctx.fillRect(entity.x * scale, entity.y * scale, scale, scale);
-    ctx.fillStyle = 'gray';
-    ctx.fillText(entity.name, entity.x * scale, entity.y * scale - 10);
-    ctx.fillStyle = 'green';
-    ctx.fillRect(entity.x * scale, entity.y * scale - 7, entity.hp * 3, 5);
-  }
-};
-
-var tick = function tick() {
-  user.prevX = user.x;
-  user.prevY = user.y;
-
-  var prevDestX = user.destX;
-  var prevDestY = user.destY;
-
-  // Key input
-  if (myKeys.keydown[myKeys.KEYBOARD.KEY_LEFT]) {
-    user.destX = Math.max(0, user.destX - 0.1);
-  }
-  if (myKeys.keydown[myKeys.KEYBOARD.KEY_UP]) {
-    user.destY = Math.max(0, user.destY - 0.1);
-  }
-  if (myKeys.keydown[myKeys.KEYBOARD.KEY_RIGHT]) {
-    user.destX = Math.min(mapSize, user.destX + 0.1);
-  }
-  if (myKeys.keydown[myKeys.KEYBOARD.KEY_DOWN]) {
-    user.destY = Math.min(mapSize, user.destY + 0.1);
   }
 
-  if (!Constants.canWalk(map, user.destX, user.destY)) {
-    user.destX = prevDestX;
-    user.destY = prevDestY;
+  // The current time minus 10 seconds
+  var time = new Date().getTime() - 10000;
+  for (var _i4 = 0; _i4 < messageList.length; _i4++) {
+    var msg = messageList[_i4];
+    // If it's older than that, remove
+    if (msg.time < time) {
+      messageList.splice(_i4, 1);
+    }
   }
 
-  // Reset alpha
-  user.alpha = 0;
-
-  // Emit update
-  socket.emit('movement', user);
+  // Recalculate FoV
+  fov();
 
   // Redraw
   redraw();
@@ -184,22 +311,20 @@ var onUpdate = function onUpdate(data) {
 
     // Set map data
     readMap(data.map);
-    mapSize = map.bounds;
-    canvas.width = mapSize * scale;
-    canvas.height = mapSize * scale;
+    canvas.width = map.bounds * scale;
+    canvas.height = map.bounds * scale;
     canvas2.width = canvas.width;
     canvas2.height = canvas.height;
     redrawBackground = true;
 
     // Start updates
-    requestAnimationFrame(tick);
+    tick();
     return;
   }
 
   var entity = entityList[data.id];
   if (!entity) {
     entityList[data.id] = data;
-    requestAnimationFrame(tick);
     return;
   }
   if (entity.lastUpdate >= data.lastUpdate) {
@@ -221,6 +346,7 @@ var init = function init() {
   ctx = canvas.getContext('2d');
   canvas2 = document.querySelector('#background');
   background = canvas2.getContext('2d');
+  messageBox = document.querySelector('#msgBox');
 
   socket = io.connect();
 
@@ -230,9 +356,21 @@ var init = function init() {
 
   socket.on('update', onUpdate);
 
+  socket.on('playerMsg', function (data) {
+    messageList.push(data);
+  });
+
   socket.on('kill', function (data) {
     if (entityList[data.id]) {
       delete entityList[data.id];
+    }
+  });
+
+  messageBox.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      socket.emit('playerMsg', { msg: messageBox.value });
+      messageBox.value = '';
+      messageBox.blur();
     }
   });
 };
@@ -274,8 +412,12 @@ if (typeof module !== 'undefined' && module.exports) {
       return Math.floor(Math.random() * i);
     };
 
+    var floorLoc = function floorLoc(i) {
+      return Math.floor(i + 0.5);
+    };
+
     var getTile = function getTile(map, x, y) {
-      return map.get(Math.floor(x + 0.5), Math.floor(y + 0.5));
+      return map.get(floorLoc(x), floorLoc(y));
     };
 
     var canWalk = function canWalk(map, x, y) {
@@ -298,6 +440,7 @@ if (typeof module !== 'undefined' && module.exports) {
       closeToSpawn: closeToSpawn,
       nextInt: nextInt,
       canWalk: canWalk,
+      floorLoc: floorLoc,
       getTile: getTile,
       distSqrd: distSqrd,
       distForm: distForm
